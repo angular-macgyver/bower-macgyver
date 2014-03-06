@@ -1,5 +1,5 @@
 /**
- * MacGyver v0.2.2
+ * MacGyver v0.2.4
  * @link http://starttheshift.github.io/MacGyver
  * @license MIT
  */
@@ -8891,7 +8891,7 @@ angular.module("Mac").directive("macPopover", [
               }
             }
             options.scope = scope;
-            return popover.show(id, element, attrs, options);
+            return popover.show(id, element, options);
           }, delay);
           return true;
         };
@@ -9803,7 +9803,7 @@ macTable, macTableSection, macTableSectionSelectedModels
 
 
 angular.module("Mac").directive("macTableSelectable", [
-  "$document", "keys", function($document, keys) {
+  "$document", "$window", "keys", function($document, $window, keys) {
     var SelectHandleController, commandselect, shiftselect,
       _this = this;
     shiftselect = false;
@@ -9823,6 +9823,9 @@ angular.module("Mac").directive("macTableSelectable", [
       if (event.which === keys.COMMAND) {
         return commandselect = false;
       }
+    });
+    angular.element($window).bind("focus", function(event) {
+      return shiftselect = commandselect = false;
     });
     SelectHandleController = (function() {
       function SelectHandleController(scope, element, attrs) {
@@ -10531,12 +10534,13 @@ angular.module("Mac").directive("macTooltip", [
           inside: false
         };
         opts = util.extendAttributes("macTooltip", defaults, attrs);
-        showTip = function(event) {
+        showTip = function() {
           var elementSize, offset, tip, tooltipSize;
           if (disabled || !text) {
             return true;
           }
           tip = opts.inside ? element : angular.element(document.body);
+          removeTip(0);
           tooltip = angular.element("<div class=\"tooltip " + opts.direction + "\"><div class=\"tooltip-message\">" + text + "</div></div>");
           tip.append(tooltip);
           offset = opts.inside ? {
@@ -10584,20 +10588,26 @@ angular.module("Mac").directive("macTooltip", [
           tooltip.addClass("visible");
           return true;
         };
-        removeTip = function(event) {
+        removeTip = function(delay) {
+          if (delay == null) {
+            delay = 100;
+          }
           if (tooltip != null) {
             tooltip.removeClass("visible");
             $timeout(function() {
-              return tooltip.remove();
-            }, 100, false);
+              if (tooltip != null) {
+                tooltip.remove();
+              }
+              return tooltip = null;
+            }, delay, false);
           }
           return true;
         };
-        toggle = function(event) {
+        toggle = function() {
           if (tooltip != null) {
-            return removeTip(event);
+            return removeTip();
           } else {
-            return showTip(event);
+            return showTip();
           }
         };
         attrs.$observe("macTooltip", function(value) {
@@ -10614,7 +10624,9 @@ angular.module("Mac").directive("macTooltip", [
                   break;
                 case "hover":
                   element.bind("mouseenter", showTip);
-                  element.bind("mouseleave click", removeTip);
+                  element.bind("mouseleave click", function() {
+                    return removeTip();
+                  });
               }
               return enabled = true;
             }
@@ -10627,7 +10639,7 @@ angular.module("Mac").directive("macTooltip", [
         }
         return scope.$on("$destroy", function() {
           if (tooltip != null) {
-            return removeTip();
+            return removeTip(0);
           }
         });
       }
@@ -11287,7 +11299,14 @@ angular.module("Mac").provider("popoverViews", function() {
           var path, showPopover, template;
           showPopover = function(template) {
             var popover, popoverObj, viewScope;
-            viewScope = (options.scope || $rootScope).$new();
+            if (isScope(options.scope)) {
+              viewScope = options.scope;
+            } else {
+              viewScope = $rootScope.$new(true);
+              if (angular.isObject(options.scope)) {
+                angular.extend(viewScope, options.scope);
+              }
+            }
             if (popoverOptions.refreshOn) {
               viewScope.$on(popoverOptions.refreshOn, function() {
                 return service.resize(id);
@@ -11497,7 +11516,9 @@ angular.module("Mac").provider("popoverViews", function() {
         return $animate.leave(popoverObj.popover, function() {
           $animate.removeClass(popoverObj.element, "active");
           $rootScope.$broadcast("popoverWasHidden", popoverObj.id);
-          removeScope.$destroy();
+          if (!isScope(popoverObj.options.scope)) {
+            removeScope.$destroy();
+          }
           return typeof callback === "function" ? callback() : void 0;
         });
       },
